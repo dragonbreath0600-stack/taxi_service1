@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пассажир — Такси</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <b>Такси</b>
+    <span>Пассажир: <span id="username"></span> <button class="light" onclick="logout()">Выйти</button></span>
+  </header>
+  <main>
+    <form id="form" class="card">
+      <h3>Новый заказ</h3>
+      <input id="fromInput" placeholder="Откуда" required>
+      <input id="toInput" placeholder="Куда" required>
+      <input id="priceInput" type="number" min="1" step="any" placeholder="Цена, ₽" required>
+      <button>Заказать</button>
+    </form>
+    <h3>Мои заказы</h3>
+    <div id="orders"></div>
+  </main>
+  <script src="api.js"></script>
+  <script>
+    const statuses = { open: "Ищем водителя", assigned: "Водитель едет", completed: "Завершён", cancelled: "Отменён" };
+    const box = document.getElementById("orders");
+
+    function orderHtml(order) {
+      let offers = "";
+      if (order.status === "open") {
+        offers = order.offers.map((o) => `
+          <div class="offer">
+            <span><b>${esc(o.driver)}</b>: ${o.price} ₽, подача ${o.eta_minutes} мин</span>
+            <button data-select="${o.id}" data-order="${order.id}">Выбрать</button>
+          </div>`).join("") || '<p class="muted">Откликов пока нет</p>';
+      } else {
+        const chosen = order.offers.find((o) => o.id === order.selected_offer_id);
+        if (chosen) offers = `<p>Водитель: <b>${esc(chosen.driver)}</b>, ${chosen.price} ₽, подача ${chosen.eta_minutes} мин</p>`;
+      }
+      const cancel = order.status === "open" || order.status === "assigned"
+        ? `<button class="danger" data-cancel="${order.id}">Отменить заказ</button>` : "";
+      return `<div class="card">
+        <span class="status">${statuses[order.status]}</span>
+        <b>${esc(order.origin)} → ${esc(order.destination)}</b>
+        <div class="muted">Цена: ${order.price} ₽</div>
+        ${offers} ${cancel}
+      </div>`;
+    }
+
+    async function reload() {
+      const orders = await api("/api/orders/my");
+      box.innerHTML = orders.map(orderHtml).join("") || '<p class="muted">Заказов пока нет</p>';
+    }
+
+    box.onclick = async (e) => {
+      const d = e.target.dataset;
+      try {
+        if (d.select) await api(`/api/orders/${d.order}/offers/${d.select}/select`, "POST");
+        else if (d.cancel) await api(`/api/orders/${d.cancel}/cancel`, "POST");
+        else return;
+        await reload();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+
+    document.getElementById("form").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await api("/api/orders", "POST", {
+          origin: fromInput.value,
+          destination: toInput.value,
+          price: parseFloat(priceInput.value),
+        });
+        e.target.reset();
+        await reload();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+
+    startPage("passenger", {
+      offer_created: (d) => {
+        toast(`Новый отклик: ${d.offer.driver}, ${d.offer.price} ₽`);
+        reload();
+      },
+      order_completed: () => {
+        toast("Поездка завершена");
+        reload();
+      },
+    }, reload);
+  </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Водитель — Такси</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <b>Такси</b>
+    <span>Водитель: <span id="username"></span> <button class="light" onclick="logout()">Выйти</button></span>
+  </header>
+  <main>
+    <h3>Мои поездки</h3>
+    <div id="trips"></div>
+    <h3>Новые заказы</h3>
+    <div id="orders"></div>
+  </main>
+  <script src="api.js"></script>
+  <script>
+    const ordersBox = document.getElementById("orders");
+    const tripsBox = document.getElementById("trips");
+
+    function tripHtml(order) {
+      const done = order.status === "assigned"
+        ? `<button data-complete="${order.id}">Завершить поездку</button>` : '<span class="muted">Завершена</span>';
+      return `<div class="card">
+        <b>${esc(order.origin)} → ${esc(order.destination)}</b>
+        <div class="muted">Пассажир: ${esc(order.passenger)}, ваша цена: ${order.my_offer.price} ₽</div>
+        <p>${order.status === "cancelled" ? '<span class="error">Отменена пассажиром</span>' : done}</p>
+      </div>`;
+    }
+
+    function orderHtml(order) {
+      const form = order.my_offer
+        ? `<p>Ваш отклик: ${order.my_offer.price} ₽, подача ${order.my_offer.eta_minutes} мин. Ждём пассажира…</p>`
+        : `<div class="row">
+             <input type="number" min="1" step="any" value="${order.price}" placeholder="Цена, ₽">
+             <input type="number" min="1" step="1" value="5" placeholder="Подача, мин">
+             <button data-offer="${order.id}">Откликнуться</button>
+           </div>`;
+      return `<div class="card">
+        <b>${esc(order.origin)} → ${esc(order.destination)}</b>
+        <div class="muted">Пассажир: ${esc(order.passenger)}, цена: ${order.price} ₽</div>
+        ${form}
+      </div>`;
+    }
+
+    async function reload() {
+      const [orders, trips] = await Promise.all([api("/api/orders/available"), api("/api/driver/trips")]);
+      ordersBox.innerHTML = orders.map(orderHtml).join("") || '<p class="muted">Свободных заказов нет</p>';
+      tripsBox.innerHTML = trips.map(tripHtml).join("") || '<p class="muted">Поездок пока нет</p>';
+    }
+
+    ordersBox.onclick = async (e) => {
+      const id = e.target.dataset.offer;
+      if (!id) return;
+      const [price, eta] = e.target.parentElement.querySelectorAll("input");
+      try {
+        await api(`/api/orders/${id}/offers`, "POST",
+          { price: parseFloat(price.value), eta_minutes: parseInt(eta.value) });
+        await reload();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+
+    tripsBox.onclick = async (e) => {
+      const id = e.target.dataset.complete;
+      if (!id) return;
+      try {
+        await api(`/api/orders/${id}/complete`, "POST");
+        await reload();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+
+    startPage("driver", {
+      order_created: (d) => {
+        toast(`Новый заказ: ${d.order.origin} → ${d.order.destination}`);
+        reload();
+      },
+      order_closed: (d) => {
+        toast(d.reason === "taken" ? "Заказ занят другим водителем" : "Пассажир отменил заказ");
+        reload();
+      },
+      offer_accepted: () => {
+        toast("Пассажир выбрал вас!");
+        reload();
+      },
+      order_cancelled: () => {
+        toast("Пассажир отменил заказ");
+        reload();
+      },
+    }, reload);
+  </script>
+</body>
+</html>

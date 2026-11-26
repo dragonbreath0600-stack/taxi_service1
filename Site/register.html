@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Регистрация — Такси</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <form id="form" class="card auth">
+    <h2>Регистрация</h2>
+    <input id="loginName" placeholder="Логин (от 3 символов)" required>
+    <input id="loginPassword" type="password" placeholder="Пароль (от 6 символов)" required>
+    <label><input type="radio" name="role" value="passenger" checked style="width:auto"> Пассажир</label>
+    <label><input type="radio" name="role" value="driver" style="width:auto"> Водитель</label>
+    <p id="error" class="error"></p>
+    <button>Зарегистрироваться</button>
+    <p>Уже есть аккаунт? <a href="index.html">Войти</a></p>
+  </form>
+  <script src="api.js"></script>
+  <script>
+    document.getElementById("form").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        const data = await api("/api/auth/register", "POST", {
+          username: loginName.value,
+          password: loginPassword.value,
+          role: document.querySelector("input[name=role]:checked").value,
+        }, false);
+        localStorage.setItem("token", data.access_token);
+        openPage(data.role);
+      } catch (err) {
+        document.getElementById("error").textContent = err.message;
+      }
+    };
+  </script>
+</body>
+</html>
